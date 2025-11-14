@@ -66,7 +66,7 @@ public function main() {
 function executeSync(SyncObject syncObject) {
     int dbSyncLogIndex = -1;
     do {
-        // Check whehter active syncs are running
+        // Check whether active syncs are running
         // (This can occur in the parallel instance setup on Azure prod)
         boolean activeSync = check dbCheckProcessing();
         if activeSync {
