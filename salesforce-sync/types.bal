@@ -28,7 +28,6 @@ enum LogStatus {
     FAILED = "Failed"
 }
 
-// [Config record types]
 # Salesforce sync configuration.
 # 
 # + enabled - Enable/disable sync
@@ -159,7 +158,7 @@ type SFAccountSyncRecord record {
 # + Integration_Cloud_ARR__c - Integration Cloud ARR amount
 # + Choreo_ARR__c - Choreo ARR amount
 # + APIM_Cloud_ARR__c - APIM Cloud ARR amount
-# + CL_ARR_Today__c - 
+# + CL_ARR_Today__c - Cloud ARR today amount
 # + ARR_Cloud_ARR__c - Total Software + Cloud Products ARR value
 # + IAM_ARR_AND_Cloud__c - IAM Software and Cloud ARR value
 # + Integration_ARR_AND_Cloud__c - Integration Software and Cloud ARR value
