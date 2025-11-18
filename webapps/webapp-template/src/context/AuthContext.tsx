@@ -142,23 +142,17 @@ const AppAuthProvider = (props: { children: React.ReactNode }) => {
     };
   }, [state.isAuthenticated, state.isLoading]);
 
-  const refreshToken = () => {
-    return new Promise<{ accessToken: string }>(async (resolve) => {
-      const userIsAuthenticated = await isAuthenticated();
-      if (userIsAuthenticated) {
-        resolve({ accessToken: await getAccessToken() });
-      } else {
-        refreshAccessToken()
-          .then(async () => {
-            const accessToken = await getAccessToken();
-            resolve({ accessToken: accessToken });
-          })
-          .catch(() => {
-            appSignOut();
-          });
-      }
-    });
-  };
+  const refreshToken = async (): Promise<{ accessToken: string }> => {  
+    try {  
+      await refreshAccessToken();  
+      const accessToken = await getAccessToken();  
+      return { accessToken };  
+    } catch (error) {  
+      console.error("Token refresh failed: ",error)
+      await appSignOut();  
+      throw error;  
+    }  
+  };  
 
   const appSignOut = async () => {
     setAppState(AppState.Loading);
