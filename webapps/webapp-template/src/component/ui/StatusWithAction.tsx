@@ -13,10 +13,9 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-
+import { Box, Button, Container } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
-import { Box, Container, Button } from "@mui/material";
 
 interface PreLoaderProps {
   message?: string | null;
@@ -45,12 +44,14 @@ const StatusWithAction = (props: PreLoaderProps) => {
             spacing={2}
           >
             <Grid size={{ xs: 12 }}>
-              <img
-                alt="logo"
-                width="150"
-                height="auto"
-                src="https://wso2.cachefly.net/wso2/sites/images/brand/downloads/wso2-logo.png"
-              ></img>
+              {!props.hideLogo && (
+                <img
+                  alt="logo"
+                  width="150"
+                  height="auto"
+                  src="https://wso2.cachefly.net/wso2/sites/images/brand/downloads/wso2-logo.png"
+                />
+              )}
             </Grid>
             <Grid size={{ xs: 12 }}></Grid>
 
