@@ -78,7 +78,7 @@ type ConfirmationModalContextProviderProps = {
 
 const ConfirmationModalContext = React.createContext<ConfirmationDialogContextType | null>(null);
 
-const ConfirmationDialogContextProvider: React.FC<ConfirmationModalContextProviderProps> = (
+const ConfirmationModalContextProvider: React.FC<ConfirmationModalContextProviderProps> = (
   props,
 ) => {
   const { setShow, show, onHide } = useDialogShow();
@@ -261,7 +261,7 @@ const useConfirmationModalContext = (): ConfirmationDialogContextType => {
   const context = useContext(ConfirmationModalContext);
   if (!context) {
     throw new Error(
-      "useConfirmationModalContext must be used within a ConfirmationDialogContextProvider",
+      "useConfirmationModalContext must be used within a ConfirmationModalContextProvider",
     );
   }
   return context;
@@ -269,4 +269,4 @@ const useConfirmationModalContext = (): ConfirmationDialogContextType => {
 
 export { useDialogShow, useConfirmationModalContext };
 
-export default ConfirmationDialogContextProvider;
+export default ConfirmationModalContextProvider;
