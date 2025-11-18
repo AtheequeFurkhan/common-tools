@@ -28,7 +28,7 @@ const Link = React.forwardRef<HTMLAnchorElement, RouterLinkProps>(function Link(
   return <RouterLink ref={ref} {...itemProps} role={undefined} />;
 });
 
-export default function Error() {
+export default function NotFoundPage() {
   return (
     <Box
       sx={{
