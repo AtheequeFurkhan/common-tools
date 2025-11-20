@@ -208,7 +208,7 @@ function dbPrepareInitQuery(any[] records) returns sql:ParameterizedQuery|error 
         + string `(${(typeof records).toString()}) not defined.`);
 }
 
-# Generate the batch sync (insert/update) SQL query array for given Salesforce object records.
+# Generate the sync (insert/update) SQL query array for given Salesforce object records.
 #
 # + records - Salesforce object records array
 # + return - Generated batch query as a `sql:ParameterizedQuery` array
