@@ -98,6 +98,7 @@ type SFAccountSyncRecord record {
     string? BillingCountry;
     # Shipping Country
     string? ShippingCountry;
+    # Owner record.
     record {
         # Owner Email
         string Email;
