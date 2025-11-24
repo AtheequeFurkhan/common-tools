@@ -59,9 +59,7 @@ export default function Layout() {
     }
   }, [navigate]);
 
-  console.log("surface primary : ", theme.palette.surface.primary.active)
-
-  return (
+   return (
     <ConfirmationModalContextProvider>
       {/* Full screen container */}
       <Box
