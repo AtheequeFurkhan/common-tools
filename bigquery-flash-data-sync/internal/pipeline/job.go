@@ -357,7 +357,7 @@ func executeJob(ctx context.Context, bqClient *bigquery.Client, cfg *model.Confi
 	if cfg.TruncateOnSync {
 		loader.WriteDisposition = bigquery.WriteTruncate
 	} else {
-		loader.WriteDisposition = bigquery.WriteTruncate // Default to truncate for now
+		loader.WriteDisposition = bigquery.WriteAppend
 	}
 
 	logger.Info("Starting BigQuery load job",

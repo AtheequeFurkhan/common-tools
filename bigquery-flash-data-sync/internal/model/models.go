@@ -173,6 +173,7 @@ func SchemasMatch(s1, s2 bigquery.Schema, logger *zap.Logger) bool {
 // Returns a generic map[string]any suitable for serialization or database storage.
 func (r *DynamicRow) ToSaveable() map[string]any {
 	result := make(map[string]any)
+
 	for i, colName := range r.ColumnNames {
 		result[colName] = r.Values[i]
 	}

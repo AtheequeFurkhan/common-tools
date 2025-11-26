@@ -23,6 +23,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/wso2-enterprise/digiops-finance/bigquery-flash-data-sync/internal/model"
@@ -30,6 +31,26 @@ import (
 	"cloud.google.com/go/bigquery"
 	"go.uber.org/zap"
 )
+
+// validIdentifierRegex matches valid BigQuery identifiers.
+// BigQuery identifiers can contain letters (a-z, A-Z), digits (0-9), underscores (_), and hyphens (-).
+// They must start with a letter or underscore.
+var validIdentifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)
+
+// validateBigQueryIdentifier checks if an identifier is safe for use in BigQuery queries.
+// Returns an error if the identifier contains invalid characters that could enable SQL injection.
+func validateBigQueryIdentifier(identifier string, identifierType string) error {
+	if identifier == "" {
+		return fmt.Errorf("%s cannot be empty", identifierType)
+	}
+	if len(identifier) > 1024 {
+		return fmt.Errorf("%s exceeds maximum length of 1024 characters", identifierType)
+	}
+	if !validIdentifierRegex.MatchString(identifier) {
+		return fmt.Errorf("%s '%s' contains invalid characters; must match pattern [a-zA-Z_][a-zA-Z0-9_-]*", identifierType, identifier)
+	}
+	return nil
+}
 
 // InferSchemaFromDatabase infers a BigQuery schema from a SQL database query.
 // Supports MySQL and PostgreSQL database types.
@@ -288,77 +309,4 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 	}
 
 	return nil
-}
-
-// truncateTable deletes all data from a BigQuery table while preserving its schema.
-// This is useful for full refresh sync operations.
-func truncateTable(ctx context.Context, client *bigquery.Client, datasetID string, tableName string, logger *zap.Logger) error {
-	logger.Info("Truncating BigQuery table",
-		zap.String("dataset", datasetID),
-		zap.String("table", tableName))
-
-	query := client.Query(fmt.Sprintf("TRUNCATE TABLE `%s.%s`", datasetID, tableName))
-	job, err := query.Run(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start truncate job for '%s': %w", tableName, err)
-	}
-
-	status, err := job.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to wait for truncate job on '%s': %w", tableName, err)
-	}
-
-	if err := status.Err(); err != nil {
-		return fmt.Errorf("truncate job failed for '%s': %w", tableName, err)
-	}
-
-	logger.Info("Table truncated successfully",
-		zap.String("table", tableName))
-	return nil
-}
-
-// getTableRowCount returns the number of rows in a BigQuery table.
-// Useful for validation and logging purposes.
-func getTableRowCount(ctx context.Context, client *bigquery.Client, datasetID string, tableName string, logger *zap.Logger) (int64, error) {
-	tableRef := client.Dataset(datasetID).Table(tableName)
-	metadata, err := tableRef.Metadata(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get metadata for '%s': %w", tableName, err)
-	}
-
-	logger.Debug("Retrieved table row count",
-		zap.String("table", tableName),
-		zap.Int64("rows", int64(metadata.NumRows)))
-
-	return int64(metadata.NumRows), nil
-}
-
-// listDatasetTables returns a list of all table names in a BigQuery dataset.
-func listDatasetTables(ctx context.Context, client *bigquery.Client, datasetID string, logger *zap.Logger) ([]string, error) {
-	logger.Debug("Listing tables in dataset", zap.String("dataset", datasetID))
-
-	var tableNames []string
-	it := client.Dataset(datasetID).Tables(ctx)
-
-	for {
-		table, err := it.Next()
-		if err != nil {
-			// Check if we've reached the end of the iterator
-			if err.Error() == "no more items in iterator" {
-				break
-			}
-			// For other errors, return what we have so far
-			logger.Warn("Error iterating tables, returning partial list",
-				zap.Error(err),
-				zap.Int("tables_found", len(tableNames)))
-			break
-		}
-		tableNames = append(tableNames, table.TableID)
-	}
-
-	logger.Debug("Found tables in dataset",
-		zap.String("dataset", datasetID),
-		zap.Int("table_count", len(tableNames)))
-
-	return tableNames, nil
 }
