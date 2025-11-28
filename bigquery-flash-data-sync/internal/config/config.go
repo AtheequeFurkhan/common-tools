@@ -243,14 +243,14 @@ func buildConnectionString(dbType, host, port, database, user, password, prefix 
 	switch dbType {
 	case "mysql":
 		return fmt.Sprintf(
-			"%s:%s@tcp(%s:%s)/%s? tls=true&parseTime=true&timeout=%s&readTimeout=%s&writeTimeout=%s",
+			"%s:%s@tcp(%s:%s)/%s?parseTime=true&timeout=%s&readTimeout=%s&writeTimeout=%s",
 			user, password, host, port, database,
 			connTimeout, readTimeout, writeTimeout,
 		)
 	case "postgres":
 		return fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=require connect_timeout=30",
-			host, port, user, password, database,
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=require connect_timeout=%s statement_timeout=%s",
+			host, port, user, password, database, connTimeout, readTimeout,
 		)
 	default:
 		return fmt.Sprintf(
