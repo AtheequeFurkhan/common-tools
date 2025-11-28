@@ -326,7 +326,7 @@ func executeJob(ctx context.Context, bqClient *bigquery.Client, cfg *model.Confi
 	defer rows.Close()
 
 	// In-Memory Buffer
-	const maxRowsPerBatch = 50000
+	maxRowsPerBatch := job.BatchSize
 
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
