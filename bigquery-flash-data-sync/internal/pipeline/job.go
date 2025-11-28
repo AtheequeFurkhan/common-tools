@@ -25,6 +25,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/wso2-open-operations/common-tools/bigquery-flash-data-sync/internal/model"
@@ -131,7 +133,14 @@ func runTableJob(ctx context.Context, bqClient *bigquery.Client, cfg *model.Conf
 
 	logger.Info("Starting table sync job")
 
-	sourceQuery := buildSourceQuery(dbConfig, tableConfig)
+	sourceQuery, err := buildSourceQuery(dbConfig, tableConfig)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to build source query: %w", err)
+		result.CompletedAt = time.Now()
+		result.Duration = result.CompletedAt.Sub(result.StartedAt)
+		logger.Error("Failed to build source query", zap.Error(err))
+		return result
+	}
 	dummyQuery := sourceQuery + " LIMIT 1"
 
 	logger.Debug("Generated queries",
@@ -220,19 +229,45 @@ func runTableJob(ctx context.Context, bqClient *bigquery.Client, cfg *model.Conf
 }
 
 // buildSourceQuery constructs the SQL query for extracting data from the source table.
-func buildSourceQuery(dbConfig *model.DatabaseConfig, tableConfig *model.TableConfig) string {
-	columns := "*"
-	if len(tableConfig.Columns) > 0 {
-		columns = ""
-		for i, col := range tableConfig.Columns {
-			if i > 0 {
-				columns += ", "
-			}
-			columns += col
-		}
+func buildSourceQuery(dbConfig *model.DatabaseConfig, tableConfig *model.TableConfig) (string, error) {
+	// Validate identifiers to prevent SQL injection
+	if err := validateSQLIdentifier(dbConfig.DatabaseName); err != nil {
+		return "", fmt.Errorf("invalid database name: %w", err)
+	}
+	if err := validateSQLIdentifier(tableConfig.Name); err != nil {
+		return "", fmt.Errorf("invalid table name: %w", err)
 	}
 
-	return fmt.Sprintf("SELECT %s FROM %s.%s", columns, dbConfig.DatabaseName, tableConfig.Name)
+	columns := "*"
+
+	if len(tableConfig.Columns) > 0 {
+		// Validate all column names
+		for _, col := range tableConfig.Columns {
+			if err := validateSQLIdentifier(col); err != nil {
+				return "", fmt.Errorf("invalid column name: %w", err)
+			}
+		}
+
+		// Use strings.Join for cleaner concatenation
+		columns = strings.Join(tableConfig.Columns, ", ")
+	}
+
+	// Build final SELECT query
+	return fmt.Sprintf("SELECT %s FROM %s.%s",
+		columns,
+		dbConfig.DatabaseName,
+		tableConfig.Name,
+	), nil
+}
+
+var validSQLIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// validateSQLIdentifier ensures the identifier is safe to insert into a SQL query.
+func validateSQLIdentifier(id string) error {
+	if !validSQLIdentifier.MatchString(id) {
+		return fmt.Errorf("invalid SQL identifier: %s", id)
+	}
+	return nil
 }
 
 // openDatabaseConnection opens a connection to the source database with proper configuration.
