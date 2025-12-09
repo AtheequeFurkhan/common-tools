@@ -1,6 +1,6 @@
-// Copyright (c) 2025 WSO2 LLC.(https://www.wso2.com).
+// Copyright (c) 2025 WSO2 LLC. (https://www.wso2.com).
 //
-// WSO2 LLC.  licenses this file to you under the Apache License,
+// WSO2 LLC. licenses this file to you under the Apache License,
 // Version 2.0 (the "License"); you may not use this file except
 // in compliance with the License.
 // You may obtain a copy of the License at
@@ -36,6 +36,13 @@ import (
 	"cloud.google.com/go/bigquery"
 	"go.uber.org/zap"
 )
+
+// dbDriverMap maps configuration database types to Go SQL driver names.
+// This allows for easy extension (e.g., mapping "mssql" to "sqlserver" driver).
+var dbDriverMap = map[string]string{
+	"mysql":    "mysql",
+	"postgres": "postgres",
+}
 
 // Start initializes the BigQuery client and orchestrates multiple concurrent ETL jobs using errgroup.
 // It dynamically processes all enabled databases and tables from the configuration.
@@ -286,13 +293,11 @@ func validateSQLIdentifier(id string) error {
 
 // openDatabaseConnection opens a connection to the source database with proper configuration.
 func openDatabaseConnection(dbConfig *model.DatabaseConfig, cfg *model.Config, logger *zap.Logger) (*sql.DB, error) {
-	var driverName string
-	switch dbConfig.Type {
-	case "mysql":
-		driverName = "mysql"
-	case "postgres":
-		driverName = "postgres"
-	default:
+	// Map lookup based on database type (case-insensitive)
+	driverName, exists := dbDriverMap[strings.ToLower(dbConfig.Type)]
+	if !exists {
+		logger.Warn("Unknown database type, defaulting to MySQL driver",
+			zap.String("configured_type", dbConfig.Type))
 		driverName = "mysql"
 	}
 

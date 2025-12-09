@@ -95,7 +95,7 @@ func mysqlTypeToBigQueryType(mysqlType string, logger *zap.Logger) bigquery.Fiel
 	case "INT", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "INTEGER":
 		return bigquery.IntegerFieldType
 	case "FLOAT", "DOUBLE", "REAL":
- 		return bigquery.FloatFieldType
+		return bigquery.FloatFieldType
 	case "DECIMAL", "NUMERIC":
 		return bigquery.NumericFieldType
 	case "DATE":
@@ -129,7 +129,7 @@ func postgresTypeToBigQueryType(pgType string, logger *zap.Logger) bigquery.Fiel
 	case "INT", "INT2", "INT4", "INT8", "INTEGER", "SMALLINT", "BIGINT", "SERIAL", "BIGSERIAL", "SMALLSERIAL":
 		return bigquery.IntegerFieldType
 	case "FLOAT", "FLOAT4", "FLOAT8", "DOUBLE", "DOUBLE PRECISION", "REAL":
- 		return bigquery.FloatFieldType
+		return bigquery.FloatFieldType
 	case "DECIMAL", "NUMERIC", "MONEY":
 		return bigquery.NumericFieldType
 	case "DATE":
@@ -246,7 +246,7 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 	if err := validateBigQueryIdentifier(table.Name, "Target table name"); err != nil {
 		return err
 	}
-	
+
 	logger.Info("Checking BigQuery table",
 		zap.String("dataset", datasetID),
 		zap.String("table", table.Name))
