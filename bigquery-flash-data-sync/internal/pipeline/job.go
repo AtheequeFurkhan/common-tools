@@ -193,7 +193,7 @@ func runTableJob(ctx context.Context, bqClient *bigquery.Client, cfg *model.Conf
 	}
 	defer db.Close()
 
-	inferredSchema, err := InferSchemaFromDatabase(db, dbConfig.Type, dummyQuery, logger)
+	inferredSchema, err := InferSchemaFromDatabase(db, dbConfig.Type, dbConfig.Name, dummyQuery, logger)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to infer schema: %w", err)
 		result.CompletedAt = time.Now()

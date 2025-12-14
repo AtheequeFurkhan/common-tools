@@ -54,7 +54,7 @@ func validateBigQueryIdentifier(identifier string, identifierType string) error 
 }
 
 // SchemaInferrer defines the function signature for database-specific schema inference.
-type SchemaInferrer func(*sql.DB, string, *zap.Logger) (bigquery.Schema, error)
+type SchemaInferrer func(*sql.DB, string, string, *zap.Logger) (bigquery.Schema, error)
 
 // schemaInferrers is a registry mapping database types to their inference functions.
 // This allows for easy extension without modifying the main InferSchemaFromDatabase function.
@@ -66,9 +66,10 @@ var schemaInferrers = map[string]SchemaInferrer{
 
 // InferSchemaFromDatabase infers a BigQuery schema from a SQL database query.
 // It uses a map-based strategy to select the correct inference logic based on dbType.
-func InferSchemaFromDatabase(db *sql.DB, dbType string, query string, logger *zap.Logger) (bigquery.Schema, error) {
+func InferSchemaFromDatabase(db *sql.DB, dbType string, dbName string, query string, logger *zap.Logger) (bigquery.Schema, error) {
 	logger.Debug("Inferring schema from database",
 		zap.String("db_type", dbType),
+		zap.String("database", dbName),
 		zap.String("query", query))
 
 	key := strings.ToLower(dbType)
@@ -76,11 +77,12 @@ func InferSchemaFromDatabase(db *sql.DB, dbType string, query string, logger *za
 	inferrer, exists := schemaInferrers[key]
 	if !exists {
 		logger.Warn("Unknown database type, defaulting to MySQL schema inference",
-			zap.String("database_type", dbType))
+			zap.String("database_type", dbType),
+			zap.String("database", dbName))
 		inferrer = schemaInferrers["mysql"]
 	}
 
-	return inferrer(db, query, logger)
+	return inferrer(db, dbName, query, logger)
 }
 
 // mysqlTypeToBigQueryType maps common MySQL database types to BigQuery types.
@@ -153,8 +155,10 @@ func postgresTypeToBigQueryType(pgType string, logger *zap.Logger) bigquery.Fiel
 
 // InferSchemaFromMySQL connects to the source DB, runs a LIMIT 1 query,
 // and builds a BigQuery Schema based on the returned column types.
-func InferSchemaFromMySQL(db *sql.DB, query string, logger *zap.Logger) (bigquery.Schema, error) {
-	logger.Debug("Inferring schema from MySQL database")
+func InferSchemaFromMySQL(db *sql.DB, dbName string, query string, logger *zap.Logger) (bigquery.Schema, error) {
+	logger.Debug("Inferring schema from MySQL database",
+		zap.String("database", dbName),
+		zap.String("query", query))
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -167,6 +171,7 @@ func InferSchemaFromMySQL(db *sql.DB, query string, logger *zap.Logger) (bigquer
 		return nil, fmt.Errorf("failed to get column types for inference: %w", err)
 	}
 	logger.Debug("Retrieved column types for schema inference",
+		zap.String("database", dbName),
 		zap.Int("column_count", len(columnTypes)))
 
 	schema := make(bigquery.Schema, 0, len(columnTypes))
@@ -180,6 +185,7 @@ func InferSchemaFromMySQL(db *sql.DB, query string, logger *zap.Logger) (bigquer
 		}
 		schema = append(schema, field)
 		logger.Debug("Mapped column to BigQuery field",
+			zap.String("database", dbName),
 			zap.String("column_name", col.Name()),
 			zap.String("mysql_type", col.DatabaseTypeName()),
 			zap.String("bigquery_type", string(bqType)),
@@ -187,6 +193,7 @@ func InferSchemaFromMySQL(db *sql.DB, query string, logger *zap.Logger) (bigquer
 	}
 
 	logger.Info("MySQL schema inference complete",
+		zap.String("database", dbName),
 		zap.Int("fields_mapped", len(schema)))
 
 	return schema, nil
@@ -194,8 +201,10 @@ func InferSchemaFromMySQL(db *sql.DB, query string, logger *zap.Logger) (bigquer
 
 // InferSchemaFromPostgres connects to the source PostgreSQL DB, runs a LIMIT 1 query,
 // and builds a BigQuery Schema based on the returned column types.
-func InferSchemaFromPostgres(db *sql.DB, query string, logger *zap.Logger) (bigquery.Schema, error) {
-	logger.Debug("Inferring schema from PostgreSQL database")
+func InferSchemaFromPostgres(db *sql.DB, dbName string, query string, logger *zap.Logger) (bigquery.Schema, error) {
+	logger.Debug("Inferring schema from PostgreSQL database",
+		zap.String("database", dbName),
+		zap.String("query", query))
 
 	rows, err := db.Query(query)
 	if err != nil {
@@ -208,6 +217,7 @@ func InferSchemaFromPostgres(db *sql.DB, query string, logger *zap.Logger) (bigq
 		return nil, fmt.Errorf("failed to get column types for inference: %w", err)
 	}
 	logger.Debug("Retrieved column types for schema inference",
+		zap.String("database", dbName),
 		zap.Int("column_count", len(columnTypes)))
 
 	schema := make(bigquery.Schema, 0, len(columnTypes))
@@ -221,6 +231,7 @@ func InferSchemaFromPostgres(db *sql.DB, query string, logger *zap.Logger) (bigq
 		}
 		schema = append(schema, field)
 		logger.Debug("Mapped column to BigQuery field",
+			zap.String("database", dbName),
 			zap.String("column_name", col.Name()),
 			zap.String("postgres_type", col.DatabaseTypeName()),
 			zap.String("bigquery_type", string(bqType)),
@@ -228,6 +239,7 @@ func InferSchemaFromPostgres(db *sql.DB, query string, logger *zap.Logger) (bigq
 	}
 
 	logger.Info("PostgreSQL schema inference complete",
+		zap.String("database", dbName),
 		zap.Int("fields_mapped", len(schema)))
 
 	return schema, nil
@@ -250,6 +262,7 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 	if err != nil {
 		if strings.Contains(err.Error(), "Not found") || strings.Contains(err.Error(), "notFound") {
 			logger.Info("Table not found, creating new table",
+				zap.String("dataset", datasetID),
 				zap.String("table", table.Name),
 				zap.Int("schema_fields", len(table.Schema)))
 
@@ -262,6 +275,7 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 			}
 
 			logger.Info("Table created successfully",
+				zap.String("dataset", datasetID),
 				zap.String("table", table.Name))
 			return nil
 		}
@@ -271,6 +285,7 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 	// Table exists, check if schema matches
 	if !model.SchemasMatch(metadata.Schema, table.Schema, logger) {
 		logger.Warn("Schema mismatch detected, attempting update",
+			zap.String("dataset", datasetID),
 			zap.String("table", table.Name),
 			zap.Int("existing_fields", len(metadata.Schema)),
 			zap.Int("new_fields", len(table.Schema)))
@@ -288,17 +303,21 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 
 			if isCriticalError {
 				logger.Error("Critical schema error detected, recreating table",
+					zap.String("dataset", datasetID),
 					zap.String("table", table.Name),
 					zap.Error(updateErr))
 
 				logger.Warn("Recreating table will delete all existing data",
+					zap.String("dataset", datasetID),
 					zap.String("table", table.Name))
 
 				// Delete existing table
 				if delErr := tableRef.Delete(ctx); delErr != nil {
 					return fmt.Errorf("failed to delete table '%s' with bad schema: %w", table.Name, delErr)
 				}
-				logger.Info("Table deleted", zap.String("table", table.Name))
+				logger.Info("Table deleted",
+					zap.String("dataset", datasetID),
+					zap.String("table", table.Name))
 
 				// Recreate table with new schema
 				if createErr := tableRef.Create(ctx, &bigquery.TableMetadata{
@@ -309,6 +328,7 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 				}
 
 				logger.Info("Table successfully recreated with corrected schema",
+					zap.String("dataset", datasetID),
 					zap.String("table", table.Name))
 				return nil
 			}
@@ -317,9 +337,11 @@ func createOrUpdateTable(ctx context.Context, client *bigquery.Client, datasetID
 		}
 
 		logger.Info("Table schema updated successfully",
+			zap.String("dataset", datasetID),
 			zap.String("table", table.Name))
 	} else {
 		logger.Debug("Table schema is up to date",
+			zap.String("dataset", datasetID),
 			zap.String("table", table.Name))
 	}
 
