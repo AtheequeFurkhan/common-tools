@@ -15,7 +15,7 @@
 // under the License
 
 // Package config is responsible for loading and parsing all environment variables
-// needed for the application to run.  It supports dynamic configuration for any
+// needed for the application to run. It supports dynamic configuration for any
 // number of databases and tables.
 package config
 
@@ -99,8 +99,10 @@ func LoadConfig(logger *zap.Logger) (*model.Config, error) {
 	maxIdle := parseInt(logger, DBMaxIdleConns, "10", 10)
 	defaultBatchSize := parseInt(logger, DefaultBatchSizeKey, "1000", 1000)
 	maxRowParseFailures := parseInt(logger, MaxRowParseFailuresKey, "100", 100)
+
 	syncTimeout := parseDuration(logger, SyncTimeoutKey, "10m", 10*time.Minute)
 	connMaxLifetime := parseDuration(logger, DBConnMaxLifetime, "1m", 1*time.Minute)
+
 	dateFormat := getEnv(DateFormatKey, "2006-01-02T15:04:05Z07:00")
 
 	dryRun := parseBool(getEnv(DryRunKey, "false"))
@@ -152,7 +154,7 @@ func loadDatabaseConfig(logger *zap.Logger, dbID string) (*model.DatabaseConfig,
 		return nil, fmt.Errorf("missing required config: %sDB_NAME and %sDB_USER are required", prefix, prefix)
 	}
 
-	connString := buildConnectionString(dbType, host, port, database, user, password, prefix)
+	connString := buildConnectionString(logger, dbType, host, port, database, user, password, prefix)
 
 	tables, err := loadTableConfigs(logger, dbID)
 	if err != nil {
@@ -235,50 +237,60 @@ func loadTableConfig(logger *zap.Logger, dbID, tableName string) *model.TableCon
 	}
 }
 
-// buildConnectionString creates a database connection string based on type
-func buildConnectionString(dbType, host, port, database, user, password, prefix string) string {
-    connTimeout := getEnv(prefix+"DB_CONN_TIMEOUT", "30s")
-    readTimeout := getEnv(prefix+"DB_READ_TIMEOUT", "60s")
-    writeTimeout := getEnv(prefix+"DB_WRITE_TIMEOUT", "60s")
-    sslMode := getEnv(prefix+"DB_SSLMODE", getEnv("DB_SSLMODE", "require"))
-    statementTimeout := getEnv(prefix+"DB_STATEMENT_TIMEOUT", readTimeout)
+// buildConnectionString creates a database connection string based on type.
+//
+// NOTE: This version uses parseInt() for timeouts, so the timeout env vars must be integers:
+// - {DB}_DB_CONN_TIMEOUT        (seconds)
+// - {DB}_DB_READ_TIMEOUT        (seconds)  (MySQL socket read timeout; also default for PG statement timeout)
+// - {DB}_DB_WRITE_TIMEOUT       (seconds)
+// - {DB}_DB_STATEMENT_TIMEOUT   (seconds)  (Postgres only; converted to milliseconds)
+func buildConnectionString(logger *zap.Logger, dbType, host, port, database, user, password, prefix string) string {
+	dbType = strings.ToLower(strings.TrimSpace(dbType))
 
-    switch dbType {
-    case "mysql":
-        return fmt.Sprintf(
-            "%s:%s@tcp(%s:%s)/%s?tls=true&parseTime=true&timeout=%s&readTimeout=%s&writeTimeout=%s",
-            user, password, host, port, database,
-            connTimeout, readTimeout, writeTimeout,
-        )
+	connTimeoutSec := parseInt(logger, prefix+"DB_CONN_TIMEOUT", "30", 30)
+	readTimeoutSec := parseInt(logger, prefix+"DB_READ_TIMEOUT", "60", 60)
+	writeTimeoutSec := parseInt(logger, prefix+"DB_WRITE_TIMEOUT", "60", 60)
 
-    case "postgres":
-        connTimeoutDur, err := time.ParseDuration(connTimeout)
-        connTimeoutSec := 30
-        if err == nil && connTimeoutDur.Seconds() > 0 {
-            connTimeoutSec = int(connTimeoutDur.Seconds())
-            if connTimeoutSec < 1 {
-                connTimeoutSec = 1
-            }
-        }
+	sslMode := getEnv(prefix+"DB_SSLMODE", getEnv("DB_SSLMODE", "require"))
 
-        statementTimeoutDur, err := time.ParseDuration(statementTimeout)
-        statementTimeoutMs := 60000
-        if err == nil && statementTimeoutDur.Milliseconds() > 0 {
-            statementTimeoutMs = int(statementTimeoutDur.Milliseconds())
-        }
+	// Postgres only: if not set, default to read timeout
+	statementTimeoutSec := parseInt(
+		logger,
+		prefix+"DB_STATEMENT_TIMEOUT",
+		strconv.Itoa(readTimeoutSec),
+		readTimeoutSec,
+	)
 
-        // NOTE: statement_timeout is set via options, not as a DSN key.
-        return fmt.Sprintf(
-            "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=%d options='-c statement_timeout=%d'",
-            host, port, user, password, database, sslMode, connTimeoutSec, statementTimeoutMs,
-        )
+	switch dbType {
+	case "mysql":
+		return fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s?tls=true&parseTime=true&timeout=%ds&readTimeout=%ds&writeTimeout=%ds",
+			user, password, host, port, database,
+			connTimeoutSec, readTimeoutSec, writeTimeoutSec,
+		)
 
-    default:
-        return fmt.Sprintf(
-            "%s:%s@tcp(%s:%s)/%s?parseTime=true",
-            user, password, host, port, database,
-        )
-    }
+	case "postgres":
+		if connTimeoutSec < 1 {
+			connTimeoutSec = 1
+		}
+
+		statementTimeoutMs := statementTimeoutSec * 1000
+
+		if statementTimeoutMs < 1 {
+			statementTimeoutMs = 60000
+		}
+
+		return fmt.Sprintf(
+			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=%d options='-c statement_timeout=%d'",
+			host, port, user, password, database, sslMode, connTimeoutSec, statementTimeoutMs,
+		)
+
+	default:
+		return fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s?parseTime=true",
+			user, password, host, port, database,
+		)
+	}
 }
 
 // getEnv retrieves the value of the environment variable for the given key.
@@ -291,7 +303,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 // parseInt fetches an environment variable by key, attempts to convert it
-// into an integer, and returns it.  If conversion fails, it logs a warning
+// into an integer, and returns it. If conversion fails, it logs a warning
 // and returns the provided fallback integer.
 func parseInt(logger *zap.Logger, key, defaultValue string, fallback int) int {
 	v := getEnv(key, defaultValue)
@@ -319,10 +331,17 @@ func parseDuration(logger *zap.Logger, key, defaultValue string, fallback time.D
 			zap.Error(err))
 		return fallback
 	}
+	return fallbackOrNonZero(d, fallback)
+}
+
+func fallbackOrNonZero(d, fallback time.Duration) time.Duration {
+	if d <= 0 {
+		return fallback
+	}
 	return d
 }
 
-// parseBool converts a string into a boolean.  It returns true for common
+// parseBool converts a string into a boolean. It returns true for common
 // truthy values ("true", "1", "yes") and false otherwise.
 func parseBool(value string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
